@@ -1,0 +1,17 @@
+{
+  "name": "null-in-graphql",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "slidev build",
+    "dev": "slidev --open",
+    "export": "slidev export"
+  },
+  "dependencies": {
+    "@iconify-json/uim": "^1.1.9",
+    "@slidev/cli": "^0.48.3",
+    "@slidev/theme-default": "latest",
+    "@slidev/theme-seriph": "latest",
+    "vue": "^3.4.21"
+  }
+}
