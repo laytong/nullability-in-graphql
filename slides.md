@@ -5,7 +5,6 @@ themeConfig:
   primary: '#A66BE7'
 # random image from a curated Unsplash collection by Anthony
 # like them? see https://unsplash.com/collections/94734566/slidev
-#background: https://cover.sli.dev
 background: https://images.unsplash.com/photo-1482747029550-096ad6aa9caf?q=80&w=2670&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D
 # some information about your slides, markdown enabled
 title: Nullability in GraphQL
@@ -24,9 +23,21 @@ mdc: true
 
 # GraphQL: Nullability
 
-Please send all complaints to /dev/null
+<div class="backdrop-blur-5px max-w-50% mx-auto text-teal">Please send all complaints to /dev/null</div>
 
-<!-- We are going to cover what non-null is and why we should use it -->
+<!-- 
+
+We are going to cover what non-null is and when/why we should use it
+
+When you're working with say a REST API, you don't always know what kind of fields you are going get back
+GraphQL improves on that by giving you the complete schema of fields available.
+
+But what happens if a field is missing in the database or an error occurs when fetching?
+Obviously even GraphQL can't solve that problem, but it does have a built in concept of nullability
+
+A field can either be nullable or non-null, and this tells you whether you could receive a null value when you ask for it. By default, every field in GraphQL is nullable, and you can opt in to mark it non-null.
+
+-->
 
 --- 
 layout: image-right
@@ -36,21 +47,17 @@ image: /Maybe.png
 # I can haz null?
 Someone has a case of the "maybes"
 ````md magic-move
-```graphql {*|2-4|7}
+```graphql {*|2-4|5}
 type Customer {
   id: ID!
-  firstName: String!
-  lastName: String!
   fullName: String!
   address: Address!
-  order: Order 
+  order: Order
 }
 ```
-```graphql
+```graphql{*|15-18}
 type Customer {
   id: ID!
-  firstName: String!
-  lastName: String!
   fullName: String!
   address: Address!
   order: Order 
@@ -63,7 +70,9 @@ type Order {
 
 type Query {
   customer(id: ID!): Customer
-  customers(name: String, limit: Int): [Customer!]
+  customers(input: { 
+    name: String, limit: Int!
+  }!): [Customer!]
   orders(customer: Customer): [Order!]!
 }
 ```
@@ -74,7 +83,10 @@ So what do null fields look like?
 
 Fields which have a ! next to them mean non-nullable
 
-This means these fields will never return a null value
+This means these fields will never return a null/undefined value
+
+The code on the right here is taken from some of our real world schema we have today. and when it's parsed by graphql codegen it renders those nullable values as "Maybe"
+
 [click]
 
 Here we can see that names, and address are required fields that will always return a value
@@ -83,16 +95,24 @@ Here we can see that names, and address are required fields that will always ret
 
 whereas order could return null
 
+Cool, easy, done. I can end my presentation here right? we're all experts now, thanks for coming to my TED talk.
+No there are some nuances I wanted to cover
+
 [click]
 
 In this next example we can start to model our relationships between orders and customers and how we might query them
 We can see some more examples of non-nullability in action
 
-our customer query uses an id filter which MUST be supplied
-whereas the customers query has some optional fields
+our customer Query takes an id for searching which is non-nullable. It is a required field.
+Whereas the customers query takes some optional fields
+
+This means that in addition to guaranteeing the shape of the result, GraphQL can also provide a guarantee for which fields are required when queried or mutating.
+
+[click]
 
 Also note the subtle difference between the return types of customers and orders. Can you guess how they might be different?
 We will cover this later
+
 -->
 
 ---
@@ -101,38 +121,71 @@ image: https://images.unsplash.com/photo-1607799279861-4dd421887fb3?q=80&w=2670&
 ---
 
 # Query results
-What's in the box?
+Defining results
 
-````md magic-move
+Imagine a return type of `[Customer]`
+
 ```js
-// ReturnType [Customer!]
+// ReturnType [Customer]
 
-// no customer found
-{ customers: null } 
+// no customers found
+{ customers: null }
+{ customers: [] } 
 
 // some results found
 {
-  customers: [{
-    name: "Mickey Mouse",
-    firstName: "Mickey",
-    lastName: "Mouse",
-  }]
+  customers: [
+    { fullName: "Mickey Mouse" }
+  ]
+}
+
+{
+  customers: [
+    null,
+    { fullName: "Mickey Mouse"},
+    { fullName: "Donald Duck" }
+  ]
 }
 ```
-```js
-// But these results are not possible
-
-customers: [{
-  fullName: null,
-  firstName: null,
-  lastName: null,
-}] 
-
-{customers: [null]} 
-```
-````
 <!--
-This means that in addition to guaranteeing the shape of the result, GraphQL can provide a guarantee for which fields must be present when queried.
+Image a return type of [Customer]
+These are the valid return types for this contract
+
+Perhaps you can see what front end validation/error handling you might need or not need to write based on these definitions?
+the variety of ways a null could appear in your data could be problematic in many cases. It's good to be very intentional with our use of "non-null" definitions
+-->
+
+---
+layout: image-right
+image: https://images.unsplash.com/photo-1607799279861-4dd421887fb3?q=80&w=2670&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D
+---
+
+# Query results
+Restricting return types
+
+If we change our return type to `[Customer!]!`
+
+```js
+// no customers
+{
+  customers: []
+}
+
+// one or more results
+{ 
+    customers: [
+      {
+        fullName: "Mickey Mouse",
+      },
+  ] 
+} 
+```
+
+<!--
+Image a return type of [Customer!]!
+These are the valid return types for this description
+
+Perhaps you can see what confidence this allows me to have in my front end code?
 -->
 ---
 layout: image-left
@@ -144,6 +197,7 @@ Stronger client contracts
 
 ````md magic-move
 ```ts
+// { customers: [Customer] }
 const result = await client.query({ query, });
 
 result.data.customers.forEach(customer => {
@@ -151,18 +205,27 @@ result.data.customers.forEach(customer => {
   console.log(restaurant.address.address1);
 });
 ```
-
 ```ts
+// { customers: [Customer] }
 const result = await client.query({ query: query });
 
 if (result.data.customers) {
   result.data.customers.forEach(customer => {
     if (customer) {
       console.log(customer.fullName);
-      console.log(customer.address.postalCode);
+      console.log(customer.address?.postalCode);
     }
   });
 }
+```
+```ts
+{ customers: [Customer!]! }
+const result = await client.query({ query, });
+
+result.data.customers.forEach(customer => {
+  console.log(customer.fullName);
+  console.log(restaurant.address.address1);
+});
 ```
 ````
 <!-- 
@@ -170,6 +233,10 @@ The usefulness of such a guarantee becomes apparent when you think about the fro
 
 At first, this might seem like a reasonable piece of code to write based on the query, since you’re expecting to get back a list of restaurants that each have a name to be displayed. 
 But, once we look more closely at our schema, it turns out that there are two potential errors hidden in this code:
+
+[click]
+
+without non-nullability, the list of restaurants is not guaranteed to be an array. If it is an array, the data could contain null records so we need to write guards for that
 
 [click]
 
@@ -260,7 +327,7 @@ type Query {
 // possible results for customers
 [] // valid
 [{...Customer}] // valid
-null // valid
+null // VALID
 [null] //invalid
 ```
 
@@ -271,8 +338,8 @@ null // valid
 ```ts
 // possible results for orders
 [] // valid
-[{...Customer}] // valid
-null // invalid
+[{...Order}] // valid
+null // INVALID
 [null] //invalid
 ```
 
@@ -305,7 +372,7 @@ One interesting conclusion here is that there’s no way to specify that the lis
 ---
 
 # Inputs
-
+````md magic-move
 ```graphql
 input CustomerFilters {
     name: String,
@@ -317,12 +384,31 @@ type Query {
 }
 ```
 
+```graphql
+input CustomerFilters {
+    name: String,
+    age: Number,
+    orders: [Int!]!
+    limit: Number!
+    offset: Number
+}
+
+type Query {
+  customersByOrder(query: CustomerFilters!): [Customer!]
+}
+```
+````
+
 <!-- 
 it's likely many of you have been using non-null modifier all this time without really thinking about it.
-
-Here we can use it to modify query fields in more complex filtering patterns
+The most common place you have probably been using it is input fields for queries and mutations
 
 in this example an array of orderIDs is required, but additional filtering say by fuzzy matching on name is an optional additional filter
+
+[click]
+
+Here we can use it to modify query fields to create more complex filtering patterns
+Look at how we can introduce pagination, or more fuzzy matching fields to provide filtering (or sorting) on our results 
 -->
 
 ---
@@ -357,15 +443,19 @@ If the answer is no (or if the question is too complex to answer) then perhaps c
 as going from nullable -> non-nullable is backwards compatible, but the reverse is not
 you can always make it non-nullable later without impacting your clients
 
-For input arguments and fields, adding non-null is a breaking change. i.e. a search param, if you make it nullable later your client's search will still work
+So remember:
+
+For input arguments and fields, adding ! is a breaking change. i.e. a search param, if you make it nullable later your client's search will still work
 
 For output fields (results), removing non-null from a field is a breaking change. there's a new state they likely won't handle
 
 [click]
 
 another example could be field privacy
-You might allow the client to specify a non-value for a field like age
-if the field is non-nullable you have to return some value in it's place like -1, rather than just null
+You might allow the client to specify a null for a PII field like age or address
+if I have the user rights to query customers, but don't have the admin rights to see for example their age, you can allow the return of null
+
+However, if the field is non-nullable you have to return some value in it's place like -1. This could cause all kinds of bugs in our client code when they get an impossible value they are not expecting. Null would be a more reliable code path
 
 [click]
 
@@ -391,7 +481,7 @@ Use nulls thoughtfully
 
 - Field arguments and input objects, where the field doesn’t make any sense if that argument is not passed
 - On object fields that are guaranteed to have a result
-- Better error detection, errors are thrown for incomplete data
+- In lists where you have a set of items. having a null record is generally unhelpful
 
 </v-clicks>
 
@@ -410,9 +500,36 @@ So in conclusion here are some best practices
 
 [click]
 
-When you know that something will always be required for filtering, or as a relationship between entities such as a 1:1 relationship.
-i.e. if an order absolutely must have a customer associated. we should enforce that through typings
-or when a results must return at least 1 result, make this easier 
+When you know that something will always be required
+i.e. for filtering. you can't fetch an order if the ID is not supplied
+
+[click]
+
+On object fields that are guaranteed to be there, to simplify frontend code. For example, every single Customer in our DB had better have a first name.
+
+[click]
+
+I usually default to non-nullable for at least items in a list. Having a set of items that contains a null record is typically unhelpful
+
+[click]
+
+When not to use them is essentially:
+
+Things that might need to be private in future
+
+[click]
+
+Input fields that have been added to an object/query later in life (to retain backwards compatibility of that query)
+
+[click]
+
+object fields that are essentially a "join" i.e. comes from a different database table as that call might fail and you'd lose the whole object
+allow it to be nullable and you can at least return partial data.
 
 -->
 
+---
+layout: end
+---
+
+## Thank you for listening
